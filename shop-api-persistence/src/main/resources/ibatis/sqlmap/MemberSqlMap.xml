@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Member">
+
+    <!-- RAW uppercase result (rule A): code reads MEMBER_ID/LOGIN_ID/NAME/GRADE/POINT -->
+    <select id="findById" parameterClass="long" resultClass="java.util.HashMap">
+        SELECT member_id, login_id, name, grade, point FROM member WHERE member_id = #id#
+    </select>
+
+    <select id="findByLoginId" parameterClass="java.lang.String" resultClass="java.util.HashMap">
+        SELECT member_id, login_id, name, grade, point FROM member WHERE login_id = #loginId#
+    </select>
+
+    <insert id="insert" parameterClass="java.util.HashMap">
+        INSERT INTO member (login_id, name, grade, point) VALUES (#loginId#, #name#, 'C', 0)
+        <selectKey keyProperty="memberId" resultClass="long" type="post">
+            SELECT LAST_INSERT_ID()
+        </selectKey>
+    </insert>
+
+    <update id="deductPoint" parameterClass="java.util.HashMap">
+        UPDATE member SET point = point - #usePoint# WHERE member_id = #memberId#
+    </update>
+
+    <update id="earnPoint" parameterClass="java.util.HashMap">
+        UPDATE member SET point = point + #earnPoint# WHERE member_id = #memberId#
+    </update>
+
+</sqlMap>

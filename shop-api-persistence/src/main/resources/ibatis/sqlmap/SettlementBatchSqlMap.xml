@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="SettlementBatch">
+  <insert id="rollupDay" parameterClass="java.util.HashMap">
+    MERGE INTO settlement_daily (seller_name, settle_day, gross_amount, commission, payout, reg_date)
+      KEY (seller_name, settle_day)
+    SELECT p.seller_name,
+           o.order_date AS settle_day,
+           SUM(oi.qty * oi.unit_price) AS gross_amount,
+           SUM( (oi.qty * oi.unit_price) *
+             CASE p.category WHEN 'ELECTRONICS' THEN 12 WHEN 'ACCESSORY' THEN 8
+               WHEN 'HOME' THEN 10 WHEN 'FASHION' THEN 15 WHEN 'SPORTS' THEN 10
+               WHEN 'BOOKS' THEN 5 ELSE 10 END / 100 ) AS commission,
+           SUM( (oi.qty * oi.unit_price) -
+             (oi.qty * oi.unit_price) *
+             CASE p.category WHEN 'ELECTRONICS' THEN 12 WHEN 'ACCESSORY' THEN 8
+               WHEN 'HOME' THEN 10 WHEN 'FASHION' THEN 15 WHEN 'SPORTS' THEN 10
+               WHEN 'BOOKS' THEN 5 ELSE 10 END / 100 ) AS payout,
+           #regDate# AS reg_date
+    FROM order_item oi
+      JOIN orders o          ON oi.order_id = o.order_id
+      JOIN product_option po ON oi.option_id = po.option_id
+      JOIN product p         ON po.product_id = p.product_id
+    WHERE o.status = 2
+    GROUP BY p.seller_name, o.order_date
+  </insert>
+  <select id="findAll" resultClass="java.util.HashMap">
+    SELECT seller_name, settle_day, gross_amount, commission, payout, reg_date
+    FROM settlement_daily
+    ORDER BY settle_day DESC, seller_name
+  </select>
+
+  <insert id="rollupDailySummary" parameterClass="java.util.HashMap">
+    MERGE INTO summary_daily (summary_day, seller_count, gross_amount, payout_amount, reg_date)
+      KEY (summary_day)
+    SELECT sd.settle_day,
+           COUNT(DISTINCT sd.seller_name),
+           SUM(sd.gross_amount),
+           SUM(sd.payout),
+           #regDate#
+    FROM settlement_daily sd
+    GROUP BY sd.settle_day
+  </insert>
+</sqlMap>

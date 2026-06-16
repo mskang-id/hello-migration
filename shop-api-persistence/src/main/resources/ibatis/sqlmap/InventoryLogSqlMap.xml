@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="InventoryLog">
+
+    <insert id="insertLog" parameterClass="java.util.HashMap">
+        INSERT INTO inventory_log (option_id, change_qty, reason, reg_date)
+        VALUES (#optionId#, #changeQty#, #reason#, #regDate#)
+    </insert>
+
+    <select id="findByOptionId" parameterClass="long" resultClass="java.util.HashMap">
+        SELECT log_id, option_id, change_qty, reason, reg_date
+        FROM inventory_log WHERE option_id = #optionId# ORDER BY log_id
+    </select>
+
+</sqlMap>

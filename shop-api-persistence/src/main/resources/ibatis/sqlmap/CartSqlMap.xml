@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Cart">
+  <insert id="insertCart" parameterClass="java.util.HashMap">
+    INSERT INTO cart (member_id, status, reg_date) VALUES (#memberId#, 'OPEN', #regDate#)
+    <selectKey keyProperty="cartId" resultClass="long" type="post">SELECT LAST_INSERT_ID()</selectKey>
+  </insert>
+  <select id="findOpenCartByMember" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT cart_id, member_id, status, reg_date FROM cart
+    WHERE member_id = #memberId# AND status = 'OPEN' ORDER BY cart_id DESC LIMIT 1
+  </select>
+  <insert id="insertItem" parameterClass="java.util.HashMap">
+    INSERT INTO cart_item (cart_id, option_id, qty) VALUES (#cartId#, #optionId#, #qty#)
+    <selectKey keyProperty="cartItemId" resultClass="long" type="post">SELECT LAST_INSERT_ID()</selectKey>
+  </insert>
+  <update id="updateItemQty" parameterClass="java.util.HashMap">
+    UPDATE cart_item SET qty = #qty# WHERE cart_item_id = #cartItemId#
+  </update>
+  <delete id="deleteItem" parameterClass="long">
+    DELETE FROM cart_item WHERE cart_item_id = #cartItemId#
+  </delete>
+  <!-- raw UPPERCASE result keys (rule A); join existing product_option/product -->
+  <select id="findItemsByCart" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT ci.cart_item_id, ci.cart_id, ci.option_id, ci.qty,
+           po.option_name, (p.price + po.extra_price) AS unit_price,
+           (p.price + po.extra_price) * ci.qty AS line_total, p.name AS product_name
+    FROM cart_item ci
+      JOIN product_option po ON ci.option_id = po.option_id
+      JOIN product p ON po.product_id = p.product_id
+    WHERE ci.cart_id = #cartId# ORDER BY ci.cart_item_id
+  </select>
+  <update id="markOrdered" parameterClass="long">
+    UPDATE cart SET status = 'ORDERED' WHERE cart_id = #cartId#
+  </update>
+  <select id="countOpenCarts" resultClass="int">SELECT COUNT(*) FROM cart WHERE status = 'OPEN'</select>
+
+  <select id="findItemsWithPromo" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT ci.cart_item_id, ci.cart_id, ci.option_id, ci.qty, po.option_name,
+      (p.price + po.extra_price) AS UNIT_PRICE,
+      (p.price + po.extra_price) * ci.qty AS LINE_TOTAL,
+      p.name AS PRODUCT_NAME,
+      COALESCE((SELECT SUM(CASE pr.discount_type WHEN 'F' THEN pr.discount_val
+             WHEN 'R' THEN (p.price * pr.discount_val / 100) ELSE 0 END)
+         FROM campaign_product cp JOIN promotion pr ON cp.promotion_id = pr.promotion_id
+         WHERE cp.product_id = p.product_id AND pr.status='ACTIVE' AND #today# BETWEEN pr.start_date AND pr.end_date),0) AS PROMO_DISCOUNT
+    FROM cart_item ci
+      JOIN product_option po ON ci.option_id = po.option_id
+      JOIN product p ON po.product_id = p.product_id
+    WHERE ci.cart_id = #cartId# ORDER BY ci.cart_item_id
+  </select>
+
+  <select id="cartDiscountedTotal" parameterClass="java.util.HashMap" resultClass="int">
+    SELECT COALESCE(SUM(t.line_total - t.promo * t.qty),0) FROM (
+      SELECT (p.price + po.extra_price) * ci.qty AS line_total, ci.qty AS qty,
+        COALESCE((SELECT SUM(CASE pr.discount_type WHEN 'F' THEN pr.discount_val
+               WHEN 'R' THEN (p.price * pr.discount_val / 100) ELSE 0 END)
+           FROM campaign_product cp JOIN promotion pr ON cp.promotion_id = pr.promotion_id
+           WHERE cp.product_id = p.product_id AND pr.status='ACTIVE' AND #today# BETWEEN pr.start_date AND pr.end_date),0) AS promo
+      FROM cart_item ci
+        JOIN product_option po ON ci.option_id = po.option_id
+        JOIN product p ON po.product_id = p.product_id
+      WHERE ci.cart_id = #cartId#) t
+  </select>
+
+  <select id="countItemsOnPromo" parameterClass="java.util.HashMap" resultClass="int">
+    SELECT COUNT(DISTINCT ci.cart_item_id)
+    FROM cart_item ci JOIN product_option po ON ci.option_id = po.option_id
+      JOIN product p ON po.product_id = p.product_id
+    WHERE ci.cart_id = #cartId# AND EXISTS (
+      SELECT 1 FROM campaign_product cp JOIN promotion pr ON cp.promotion_id = pr.promotion_id
+      WHERE cp.product_id = p.product_id AND pr.status='ACTIVE' AND #today# BETWEEN pr.start_date AND pr.end_date)
+  </select>
+</sqlMap>

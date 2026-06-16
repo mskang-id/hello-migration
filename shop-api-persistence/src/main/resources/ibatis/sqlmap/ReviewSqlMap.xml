@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Review">
+  <insert id="insertReview" parameterClass="java.util.HashMap">
+    INSERT INTO review (product_id, member_id, rating, title, body, reg_date, verified)
+    VALUES (#productId#, #memberId#, #rating#, #title#, #body#, #regDate#, #verified#)
+    <selectKey keyProperty="reviewId" resultClass="long" type="post">SELECT LAST_INSERT_ID()</selectKey>
+  </insert>
+  <select id="findByProduct" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT r.review_id, r.product_id, r.member_id, r.rating, r.title, r.body, r.reg_date,
+           m.name AS member_name
+    FROM review r JOIN member m ON r.member_id = m.member_id
+    WHERE r.product_id = #productId#
+    ORDER BY r.review_id DESC
+    LIMIT #size# OFFSET #offset#
+  </select>
+  <select id="countByProduct" parameterClass="long" resultClass="int">
+    SELECT COUNT(*) FROM review WHERE product_id = #productId#
+  </select>
+  <select id="ratingSummary" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT product_id,
+           COUNT(*) AS review_cnt,
+           COALESCE(AVG(rating), 0) AS avg_rating,
+           SUM(CASE WHEN rating &gt;= 4 THEN 1 ELSE 0 END) AS positive_cnt
+    FROM review WHERE product_id = #productId#
+    GROUP BY product_id
+  </select>
+
+  <select id="findByProductVerified" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT r.review_id, r.product_id, r.member_id, r.rating, r.title, r.body, r.reg_date, r.helpful_count,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM order_item oi
+          JOIN orders o ON oi.order_id = o.order_id
+          JOIN product_option po ON oi.option_id = po.option_id
+        WHERE po.product_id = r.product_id AND o.member_id = r.member_id AND o.status = 2)
+      THEN 'VERIFIED' ELSE 'UNVERIFIED' END AS PURCHASE_STATE
+    FROM review r WHERE r.product_id = #productId#
+    ORDER BY r.helpful_count DESC, r.review_id DESC LIMIT #size# OFFSET #offset#
+  </select>
+
+  <select id="weightedScore" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT product_id, COUNT(*) AS REVIEW_CNT,
+      COALESCE(SUM(rating*(helpful_count+1)),0) AS WEIGHT_NUM,
+      COALESCE(SUM(helpful_count+1),0) AS WEIGHT_DEN,
+      COALESCE(SUM(rating*(helpful_count+1))*100/SUM(helpful_count+1),0) AS WEIGHTED_SCORE_X100
+    FROM review WHERE product_id = #productId# GROUP BY product_id
+  </select>
+
+  <select id="ratingHistogram" parameterClass="long" resultClass="java.util.HashMap">
+                  SELECT 5 AS STAR, SUM(CASE WHEN rating=5 THEN 1 ELSE 0 END) AS CNT FROM review WHERE product_id=#productId#
+    UNION ALL SELECT 4,            SUM(CASE WHEN rating=4 THEN 1 ELSE 0 END)        FROM review WHERE product_id=#productId#
+    UNION ALL SELECT 3,            SUM(CASE WHEN rating=3 THEN 1 ELSE 0 END)        FROM review WHERE product_id=#productId#
+    UNION ALL SELECT 2,            SUM(CASE WHEN rating=2 THEN 1 ELSE 0 END)        FROM review WHERE product_id=#productId#
+    UNION ALL SELECT 1,            SUM(CASE WHEN rating=1 THEN 1 ELSE 0 END)        FROM review WHERE product_id=#productId#
+    ORDER BY STAR DESC
+  </select>
+
+  <select id="topHelpful" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT review_id, product_id, member_id, rating, title, helpful_count
+    FROM review WHERE product_id = #productId# ORDER BY helpful_count DESC LIMIT #size#
+  </select>
+
+  <select id="countVerified" parameterClass="long" resultClass="int">
+    SELECT COUNT(*) FROM review r WHERE r.product_id = #productId# AND EXISTS (
+      SELECT 1 FROM order_item oi JOIN orders o ON oi.order_id=o.order_id
+        JOIN product_option po ON oi.option_id=po.option_id
+      WHERE po.product_id = r.product_id AND o.member_id = r.member_id AND o.status = 2)
+  </select>
+</sqlMap>

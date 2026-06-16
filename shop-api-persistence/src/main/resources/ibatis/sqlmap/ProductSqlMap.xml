@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Product">
+
+    <select id="findAllOnSale" resultClass="com.shopmall.common.vo.ProductVO">
+        SELECT product_id AS productId, name, category, price,
+               seller_name AS sellerName, status
+        FROM product WHERE status = 'ON_SALE'
+    </select>
+
+    <select id="findById" parameterClass="long" resultClass="com.shopmall.common.vo.ProductVO">
+        SELECT product_id AS productId, name, category, price,
+               seller_name AS sellerName, status
+        FROM product WHERE product_id = #id#
+    </select>
+
+    <select id="findOptionsByProductId" parameterClass="long" resultClass="com.shopmall.common.vo.ProductOptionVO">
+        SELECT option_id AS optionId, product_id AS productId, option_name AS optionName,
+               extra_price AS extraPrice, stock_qty AS stockQty
+        FROM product_option WHERE product_id = #productId#
+    </select>
+
+    <!-- dynamic search: <where>/<if>/<foreach> rewritten to <dynamic>/<isNotEmpty>/<isNotNull>/<iterate> -->
+    <select id="search" parameterClass="java.util.HashMap" resultClass="com.shopmall.common.vo.ProductVO">
+        SELECT product_id AS productId, name, category, price,
+               seller_name AS sellerName, status
+        FROM product
+        <dynamic prepend="WHERE">
+            <isNotEmpty prepend="AND" property="keyword">
+                name LIKE CONCAT('%', #keyword#, '%')
+            </isNotEmpty>
+            <isNotEmpty prepend="AND" property="category">
+                category = #category#
+            </isNotEmpty>
+            <isNotNull prepend="AND" property="minPrice">
+                price &gt;= #minPrice#
+            </isNotNull>
+            <isNotNull prepend="AND" property="maxPrice">
+                price &lt;= #maxPrice#
+            </isNotNull>
+            <isNotEmpty prepend="AND" property="statuses">
+                status IN
+                <iterate property="statuses" open="(" close=")" conjunction=",">
+                    #statuses[]#
+                </iterate>
+            </isNotEmpty>
+        </dynamic>
+        ORDER BY product_id
+    </select>
+
+    <!-- RAW uppercase result (rule A): code reads OPTION_ID/PRODUCT_ID/OPTION_NAME/
+         EXTRA_PRICE/STOCK_QTY/PRODUCT_NAME/BASE_PRICE -->
+    <select id="findOptionById" parameterClass="long" resultClass="java.util.HashMap">
+        SELECT po.option_id, po.product_id, po.option_name, po.extra_price, po.stock_qty,
+               p.name AS product_name, p.price AS base_price
+        FROM product_option po JOIN product p ON po.product_id = p.product_id
+        WHERE po.option_id = #optionId#
+    </select>
+
+    <update id="deductStock" parameterClass="java.util.HashMap">
+        UPDATE product_option SET stock_qty = stock_qty - #qty#
+        WHERE option_id = #optionId#
+    </update>
+
+    <update id="restock" parameterClass="java.util.HashMap">
+        UPDATE product_option SET stock_qty = stock_qty + #qty# WHERE option_id = #optionId#
+    </update>
+
+    <select id="findAllPaged" parameterClass="java.util.HashMap" resultClass="com.shopmall.common.vo.ProductVO">
+        SELECT product_id AS productId, name, category, price,
+               seller_name AS sellerName, status
+        FROM product
+        ORDER BY product_id
+        LIMIT #size# OFFSET #offset#
+    </select>
+    <select id="countAll" resultClass="int">
+        SELECT COUNT(*) FROM product
+    </select>
+
+    <select id="countOnSaleByCategory" parameterClass="java.util.HashMap" resultClass="int">
+        SELECT COUNT(*) FROM product WHERE status = 'ON_SALE' AND category = #category#
+    </select>
+
+</sqlMap>

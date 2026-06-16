@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:task="http://www.springframework.org/schema/task"
+       xsi:schemaLocation="
+         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+         http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task.xsd">
+
+    <task:annotation-driven executor="shopAsyncExecutor"/>
+    <task:executor id="shopAsyncExecutor" pool-size="2"/>
+
+    <task:scheduler id="shopBatchScheduler" pool-size="2"/>
+
+    <task:scheduled-tasks scheduler="shopBatchScheduler">
+        <task:scheduled ref="settlementBatch"   method="run" fixed-delay="3600000"/>
+        <task:scheduled ref="pointExpiryBatch"  method="run" fixed-delay="3600000"/>
+        <task:scheduled ref="dailySummaryBatch" method="run" cron="0 30 2 * * *"/>
+    </task:scheduled-tasks>
+</beans>

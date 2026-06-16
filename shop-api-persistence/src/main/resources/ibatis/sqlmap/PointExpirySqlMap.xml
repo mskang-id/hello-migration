@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="PointExpiry">
+  <select id="findExpirable" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT pe_id, member_id, grant_amount, expire_date
+    FROM point_expiry
+    WHERE swept_yn = 'N'
+      AND member_id &gt;= 9
+      <dynamic prepend="AND">
+        <isNotNull property="cutoff">expire_date &lt; #cutoff#</isNotNull>
+      </dynamic>
+    ORDER BY pe_id
+  </select>
+  <insert id="insertExpireLedger" parameterClass="java.util.HashMap">
+    INSERT INTO point_ledger (member_id, delta, reason, reg_date)
+    VALUES (#memberId#, #delta#, 'EXPIRE', #regDate#)
+  </insert>
+  <update id="markSwept" parameterClass="long">
+    UPDATE point_expiry SET swept_yn = 'Y' WHERE pe_id = #peId#
+  </update>
+  <select id="findLedger" resultClass="java.util.HashMap">
+    SELECT ledger_id, member_id, delta, reason, reg_date
+    FROM point_ledger
+    ORDER BY ledger_id DESC
+  </select>
+</sqlMap>

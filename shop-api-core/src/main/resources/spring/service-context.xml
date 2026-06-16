@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="
+         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!-- core tiers: facade / service / biz / manager / pg -->
+    <context:component-scan base-package="com.shopmall.facade, com.shopmall.service, com.shopmall.biz, com.shopmall.manager, com.shopmall.pg"/>
+
+    <!-- config sprawl: pg.properties loaded here, jdbc.properties loaded in datasource-context -->
+    <context:property-placeholder location="classpath:pg.properties" ignore-unresolvable="true"/>
+</beans>

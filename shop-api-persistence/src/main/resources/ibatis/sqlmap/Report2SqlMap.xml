@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Report2">
+
+  <!-- (a) bestSellerRevenueShare: uncorrelated scalar subquery (grand total)
+       + revenue-share % + CASE tier. No OVER(). -->
+  <select id="bestSellerRevenueShare" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT p.product_id AS PRODUCT_ID, p.name AS NAME, p.category AS CATEGORY,
+           SUM(oi.qty * oi.unit_price) AS REVENUE,
+           SUM(oi.qty * oi.unit_price) * 100 /
+             (SELECT SUM(oi2.qty * oi2.unit_price)
+                FROM order_item oi2 JOIN orders o2 ON oi2.order_id = o2.order_id
+               WHERE o2.status = 2) AS REVENUE_PCT,
+           CASE WHEN SUM(oi.qty * oi.unit_price) >= 200000 THEN 'STAR'
+                WHEN SUM(oi.qty * oi.unit_price) >= 50000  THEN 'STRONG'
+                ELSE 'LONGTAIL' END AS TIER
+    FROM order_item oi
+      JOIN orders o          ON oi.order_id = o.order_id
+      JOIN product_option po ON oi.option_id = po.option_id
+      JOIN product p         ON po.product_id = p.product_id
+    WHERE o.status = 2
+    GROUP BY p.product_id, p.name, p.category
+    ORDER BY REVENUE DESC
+    LIMIT #topN#
+  </select>
+
+  <!-- (b) bigSpenders: HAVING SUM(...) > (SELECT AVG of per-member totals)
+       (derived table, nested aggregate). -->
+  <select id="bigSpenders" resultClass="java.util.HashMap">
+    SELECT m.member_id AS MEMBER_ID, m.name AS NAME, m.grade AS GRADE,
+           SUM(o.total_price) AS TOTAL_SPEND, COUNT(o.order_id) AS ORDER_CNT
+    FROM member m JOIN orders o ON o.member_id = m.member_id
+    WHERE o.status = 2
+    GROUP BY m.member_id, m.name, m.grade
+    HAVING SUM(o.total_price) >
+      (SELECT AVG(t.member_total) FROM
+         (SELECT SUM(o2.total_price) AS member_total FROM orders o2 WHERE o2.status = 2 GROUP BY o2.member_id) t)
+    ORDER BY TOTAL_SPEND DESC
+  </select>
+
+  <!-- (c) categorySales: COALESCE on NULL category + CASE volume tier
+       + GROUP BY expression + COUNT(DISTINCT). -->
+  <select id="categorySales" resultClass="java.util.HashMap">
+    SELECT COALESCE(p.category, 'UNCATEGORIZED') AS CATEGORY,
+           COUNT(DISTINCT o.order_id) AS ORDER_CNT,
+           SUM(oi.qty) AS UNITS,
+           SUM(oi.qty * oi.unit_price) AS REVENUE,
+           CASE WHEN SUM(oi.qty) >= 10 THEN 'HIGH_VOLUME'
+                WHEN SUM(oi.qty) >= 3  THEN 'MID_VOLUME'
+                ELSE 'LOW_VOLUME' END AS VOLUME_TIER
+    FROM order_item oi
+      JOIN orders o          ON oi.order_id = o.order_id
+      JOIN product_option po ON oi.option_id = po.option_id
+      JOIN product p         ON po.product_id = p.product_id
+    WHERE o.status = 2
+    GROUP BY COALESCE(p.category, 'UNCATEGORIZED')
+    ORDER BY REVENUE DESC
+  </select>
+
+  <!-- (d) orderStatusBreakdown: UNION ALL (paid vs other) + magic-int CASE label + COALESCE. -->
+  <select id="orderStatusBreakdown" resultClass="java.util.HashMap">
+    SELECT 'PAID' AS STATUS_LABEL, COUNT(*) AS ORDER_CNT, COALESCE(SUM(o.total_price), 0) AS GROSS
+    FROM orders o WHERE o.status = 2
+    UNION ALL
+    SELECT CASE o.status WHEN 0 THEN 'CREATED' WHEN 1 THEN 'PENDING'
+                         WHEN 3 THEN 'CANCELLED' ELSE 'OTHER' END AS STATUS_LABEL,
+           COUNT(*) AS ORDER_CNT, COALESCE(SUM(o.total_price), 0) AS GROSS
+    FROM orders o WHERE o.status &lt;&gt; 2
+    GROUP BY CASE o.status WHEN 0 THEN 'CREATED' WHEN 1 THEN 'PENDING'
+                           WHEN 3 THEN 'CANCELLED' ELSE 'OTHER' END
+    ORDER BY STATUS_LABEL
+  </select>
+
+  <!-- (e) neverOrderedProducts: anti-join via NOT IN (SELECT...) + COALESCE + CASE dead-stock label. -->
+  <select id="neverOrderedProducts" resultClass="java.util.HashMap">
+    SELECT p.product_id AS PRODUCT_ID, p.name AS NAME,
+           COALESCE(p.category, 'UNCATEGORIZED') AS CATEGORY,
+           p.status AS STATUS, p.price AS PRICE,
+           CASE WHEN p.status = 'DISCONTINUED' THEN 'DEAD_STOCK' ELSE 'NEW_OR_IDLE' END AS FLAG
+    FROM product p
+    WHERE p.product_id NOT IN (
+       SELECT po.product_id FROM order_item oi JOIN product_option po ON oi.option_id = po.option_id)
+    ORDER BY p.product_id
+  </select>
+
+  <!-- (f) couponUsageStats: nested aggregate (SUM(CASE...) rate) + HAVING + CASE
+       effectiveness + COALESCE(AVG); read-only on coupon, never flips used_yn. -->
+  <select id="couponUsageStats" resultClass="java.util.HashMap">
+    SELECT c.discount_type AS DISCOUNT_TYPE,
+           COUNT(*) AS TOTAL_COUPONS,
+           SUM(CASE WHEN c.used_yn = 'Y' THEN 1 ELSE 0 END) AS USED_CNT,
+           SUM(CASE WHEN c.used_yn = 'Y' THEN 1 ELSE 0 END) * 100 / COUNT(*) AS USE_RATE_PCT,
+           COALESCE(AVG(c.discount_val), 0) AS AVG_DISCOUNT_VAL,
+           CASE WHEN SUM(CASE WHEN c.used_yn='Y' THEN 1 ELSE 0 END) * 100 / COUNT(*) >= 50 THEN 'EFFECTIVE'
+                WHEN SUM(CASE WHEN c.used_yn='Y' THEN 1 ELSE 0 END) * 100 / COUNT(*) > 0  THEN 'PARTIAL'
+                ELSE 'UNUSED' END AS EFFECTIVENESS
+    FROM coupon c
+    GROUP BY c.discount_type
+    HAVING COUNT(*) >= 1
+    ORDER BY USE_RATE_PCT DESC
+  </select>
+
+  <!-- (g) gradeBenchmark: correlated scalar subquery (each member vs own grade avg),
+       duplicated in column + CASE (copy-paste subquery smell; H2 1.4.200 has no CTE/LATERAL in plain mode). -->
+  <select id="gradeBenchmark" resultClass="java.util.HashMap">
+    SELECT s.MEMBER_ID, s.NAME, s.GRADE, s.TOTAL_SPEND,
+           (SELECT COALESCE(AVG(t.spend), 0) FROM
+               (SELECT o2.member_id AS mid, SUM(o2.total_price) AS spend
+                  FROM orders o2 WHERE o2.status = 2 GROUP BY o2.member_id) t
+             JOIN member m2 ON m2.member_id = t.mid WHERE m2.grade = s.GRADE) AS GRADE_AVG_SPEND,
+           CASE WHEN s.TOTAL_SPEND >= (SELECT COALESCE(AVG(t.spend),0) FROM
+               (SELECT o3.member_id AS mid, SUM(o3.total_price) AS spend
+                  FROM orders o3 WHERE o3.status = 2 GROUP BY o3.member_id) t
+             JOIN member m3 ON m3.member_id = t.mid WHERE m3.grade = s.GRADE)
+                THEN 'ABOVE_GRADE_AVG' ELSE 'BELOW_GRADE_AVG' END AS BENCHMARK
+    FROM (SELECT m.member_id AS MEMBER_ID, m.name AS NAME, m.grade AS GRADE,
+                 SUM(o.total_price) AS TOTAL_SPEND
+            FROM member m JOIN orders o ON o.member_id = m.member_id
+           WHERE o.status = 2 GROUP BY m.member_id, m.name, m.grade) s
+    ORDER BY s.GRADE, s.TOTAL_SPEND DESC
+  </select>
+
+  <!-- (h) cohortRetention: derived-table self-comparison (first-order cohort vs later orders). No OVER(). -->
+  <select id="cohortRetention" resultClass="java.util.HashMap">
+    SELECT fc.cohort_month AS COHORT_MONTH, COUNT(*) AS COHORT_SIZE,
+      SUM(CASE WHEN EXISTS (SELECT 1 FROM orders o2 WHERE o2.member_id=fc.member_id AND o2.status=2
+            AND LEFT(o2.order_date,6) &gt; fc.cohort_month) THEN 1 ELSE 0 END) AS RETAINED_CNT,
+      SUM(CASE WHEN EXISTS (SELECT 1 FROM orders o3 WHERE o3.member_id=fc.member_id AND o3.status=2
+            AND LEFT(o3.order_date,6) &gt; fc.cohort_month) THEN 1 ELSE 0 END)*100/COUNT(*) AS RETENTION_PCT
+    FROM (SELECT o.member_id, MIN(LEFT(o.order_date,6)) AS cohort_month
+            FROM orders o WHERE o.status=2 GROUP BY o.member_id) fc
+    GROUP BY fc.cohort_month ORDER BY fc.cohort_month
+  </select>
+
+  <!-- (i) inventoryTurnover: inventory_log aggregation (sold vs restocked) + CASE tier + HAVING. -->
+  <select id="inventoryTurnover" resultClass="java.util.HashMap">
+    SELECT p.product_id AS PRODUCT_ID, p.name AS NAME, COALESCE(p.category,'UNCATEGORIZED') AS CATEGORY,
+      SUM(CASE WHEN il.reason='ORDER'   THEN -il.change_qty ELSE 0 END) AS UNITS_SOLD,
+      SUM(CASE WHEN il.reason='RESTOCK' THEN  il.change_qty ELSE 0 END) AS UNITS_RESTOCKED,
+      SUM(il.change_qty) AS NET_FLOW,
+      CASE WHEN SUM(CASE WHEN il.reason='ORDER' THEN -il.change_qty ELSE 0 END) &gt;= 10 THEN 'FAST_MOVER'
+           WHEN SUM(CASE WHEN il.reason='ORDER' THEN -il.change_qty ELSE 0 END) &gt;= 1  THEN 'SLOW_MOVER'
+           ELSE 'STAGNANT' END AS TURNOVER_TIER
+    FROM inventory_log il
+      JOIN product_option po ON il.option_id = po.option_id
+      JOIN product p ON po.product_id = p.product_id
+    GROUP BY p.product_id, p.name, COALESCE(p.category,'UNCATEGORIZED')
+    HAVING SUM(CASE WHEN il.reason='ORDER' THEN -il.change_qty ELSE 0 END) &gt; 0
+    ORDER BY UNITS_SOLD DESC
+  </select>
+
+  <!-- (j) discountReconciliation: coupon vs promotion definitions, UNION ALL + CASE redemption state. -->
+  <select id="discountReconciliation" resultClass="java.util.HashMap">
+    SELECT 'COUPON' AS SOURCE, c.discount_type AS DISCOUNT_TYPE, COUNT(*) AS DEF_CNT,
+      SUM(CASE WHEN c.used_yn='N' THEN 1 ELSE 0 END) AS OPEN_CNT,
+      COALESCE(SUM(c.discount_val),0) AS TOTAL_FLAT_OR_RATE,
+      CASE WHEN SUM(CASE WHEN c.used_yn='Y' THEN 1 ELSE 0 END)=0 THEN 'NONE_REDEEMED' ELSE 'SOME_REDEEMED' END AS REDEMPTION_STATE
+    FROM coupon c GROUP BY c.discount_type
+    UNION ALL
+    SELECT 'PROMOTION' AS SOURCE, pr.discount_type AS DISCOUNT_TYPE, COUNT(*) AS DEF_CNT,
+      SUM(CASE WHEN pr.status='ACTIVE' THEN 1 ELSE 0 END) AS OPEN_CNT,
+      COALESCE(SUM(pr.discount_val),0) AS TOTAL_FLAT_OR_RATE,
+      CASE WHEN SUM(CASE WHEN pr.status='ACTIVE' THEN 1 ELSE 0 END)=0 THEN 'ALL_ENDED' ELSE 'HAS_ACTIVE' END AS REDEMPTION_STATE
+    FROM promotion pr GROUP BY pr.discount_type
+    ORDER BY SOURCE, DISCOUNT_TYPE
+  </select>
+
+  <!-- (k) ratingDistribution: per-product star histogram + AVG + CASE sentiment + HAVING. -->
+  <select id="ratingDistribution" resultClass="java.util.HashMap">
+    SELECT p.product_id AS PRODUCT_ID, p.name AS NAME, COUNT(r.review_id) AS REVIEW_CNT,
+      SUM(CASE WHEN r.rating=5 THEN 1 ELSE 0 END) AS STAR5,
+      SUM(CASE WHEN r.rating=4 THEN 1 ELSE 0 END) AS STAR4,
+      SUM(CASE WHEN r.rating=3 THEN 1 ELSE 0 END) AS STAR3,
+      SUM(CASE WHEN r.rating=2 THEN 1 ELSE 0 END) AS STAR2,
+      SUM(CASE WHEN r.rating=1 THEN 1 ELSE 0 END) AS STAR1,
+      COALESCE(AVG(r.rating),0) AS AVG_RATING,
+      CASE WHEN COALESCE(AVG(r.rating),0) &gt;= 4 THEN 'LOVED'
+           WHEN COALESCE(AVG(r.rating),0) &gt;= 3 THEN 'MIXED' ELSE 'AT_RISK' END AS SENTIMENT
+    FROM product p JOIN review r ON r.product_id = p.product_id
+    GROUP BY p.product_id, p.name HAVING COUNT(r.review_id) &gt; 0
+    ORDER BY AVG_RATING DESC, REVIEW_CNT DESC
+  </select>
+
+  <!-- (l) productsWithoutReviews: NOT EXISTS anti-join on review (on-sale gap). -->
+  <select id="productsWithoutReviews" resultClass="java.util.HashMap">
+    SELECT p.product_id AS PRODUCT_ID, p.name AS NAME, p.status AS STATUS
+    FROM product p WHERE p.status='ON_SALE' AND NOT EXISTS (
+      SELECT 1 FROM review r WHERE r.product_id = p.product_id)
+    ORDER BY p.product_id
+  </select>
+
+</sqlMap>

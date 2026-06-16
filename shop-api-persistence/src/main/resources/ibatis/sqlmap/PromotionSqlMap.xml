@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Promotion">
+  <insert id="insertPromotion" parameterClass="java.util.HashMap">
+    INSERT INTO promotion (name, discount_type, discount_val, start_date, end_date, status)
+    VALUES (#name#, #discountType#, #discountVal#, #startDate#, #endDate#, 'ACTIVE')
+    <selectKey keyProperty="promotionId" resultClass="long" type="post">SELECT LAST_INSERT_ID()</selectKey>
+  </insert>
+  <select id="findActive" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT promotion_id, name, discount_type, discount_val, start_date, end_date, status
+    FROM promotion
+    <dynamic prepend="WHERE">
+      <isNotEmpty prepend="AND " property="status"> status = #status# </isNotEmpty>
+      <isNotEmpty prepend="AND " property="today"> end_date &gt;= #today# </isNotEmpty>
+    </dynamic>
+    ORDER BY promotion_id
+  </select>
+  <select id="findById" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT promotion_id, name, discount_type, discount_val, start_date, end_date, status
+    FROM promotion WHERE promotion_id = #promotionId#
+  </select>
+  <select id="findCampaignProducts" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT cp.product_id, p.name, p.category, p.price,
+           CASE pr.discount_type WHEN 'F' THEN pr.discount_val
+                                 WHEN 'R' THEN (p.price * pr.discount_val / 100) ELSE 0 END AS computed_discount,
+           (p.price - CASE pr.discount_type WHEN 'F' THEN pr.discount_val
+                                 WHEN 'R' THEN (p.price * pr.discount_val / 100) ELSE 0 END) AS final_price
+    FROM campaign_product cp
+      JOIN product p    ON cp.product_id = p.product_id
+      JOIN promotion pr ON cp.promotion_id = pr.promotion_id
+    WHERE cp.promotion_id = #promotionId#
+    ORDER BY cp.product_id
+  </select>
+  <insert id="insertCampaignProduct" parameterClass="java.util.HashMap">
+    INSERT INTO campaign_product (promotion_id, product_id) VALUES (#promotionId#, #productId#)
+  </insert>
+
+  <select id="findStackableForProduct" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT pr.promotion_id, pr.name, pr.discount_type, pr.discount_val,
+           CASE pr.discount_type WHEN 'F' THEN pr.discount_val
+                WHEN 'R' THEN (p.price * pr.discount_val / 100) ELSE 0 END AS COMPUTED_DISCOUNT,
+           CASE WHEN #today# BETWEEN pr.start_date AND pr.end_date THEN 'IN_WINDOW' ELSE 'OUT_OF_WINDOW' END AS WINDOW_STATE
+    FROM campaign_product cp
+      JOIN promotion pr ON cp.promotion_id = pr.promotion_id
+      JOIN product p ON cp.product_id = p.product_id
+    WHERE cp.product_id = #productId# AND pr.status = 'ACTIVE'
+      AND #today# &gt;= pr.start_date AND #today# &lt;= pr.end_date
+    ORDER BY COMPUTED_DISCOUNT DESC
+  </select>
+
+  <select id="findBestPromotionForProduct" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT pr.promotion_id, pr.name, pr.discount_type, pr.discount_val,
+           CASE pr.discount_type WHEN 'F' THEN pr.discount_val
+                WHEN 'R' THEN (p.price * pr.discount_val / 100) ELSE 0 END AS COMPUTED_DISCOUNT
+    FROM campaign_product cp
+      JOIN promotion pr ON cp.promotion_id = pr.promotion_id
+      JOIN product p ON cp.product_id = p.product_id
+    WHERE cp.product_id = #productId# AND pr.status = 'ACTIVE'
+      AND #today# BETWEEN pr.start_date AND pr.end_date
+    ORDER BY COMPUTED_DISCOUNT DESC LIMIT 1
+  </select>
+
+  <select id="sumStackedDiscountForOption" parameterClass="java.util.HashMap" resultClass="int">
+    SELECT COALESCE(SUM(CASE pr.discount_type WHEN 'F' THEN pr.discount_val
+           WHEN 'R' THEN (p.price * pr.discount_val / 100) ELSE 0 END),0)
+    FROM product_option po
+      JOIN campaign_product cp ON po.product_id = cp.product_id
+      JOIN promotion pr ON cp.promotion_id = pr.promotion_id
+      JOIN product p ON po.product_id = p.product_id
+    WHERE po.option_id = #optionId# AND pr.status='ACTIVE' AND #today# BETWEEN pr.start_date AND pr.end_date
+  </select>
+
+  <select id="findExpiringSoon" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT promotion_id, name, discount_type, discount_val, start_date, end_date, status,
+      CASE WHEN end_date &lt; #today# THEN 'EXPIRED' WHEN end_date &lt;= #soon# THEN 'EXPIRING' ELSE 'OK' END AS LIFECYCLE
+    FROM promotion
+    <dynamic prepend="WHERE">
+      <isNotEmpty prepend="AND " property="status">status = #status#</isNotEmpty>
+    </dynamic>
+    ORDER BY end_date
+  </select>
+</sqlMap>

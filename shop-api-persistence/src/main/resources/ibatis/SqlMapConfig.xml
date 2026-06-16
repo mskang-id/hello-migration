@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMapConfig PUBLIC "-//ibatis.apache.org//DTD SQL Map Config 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-config-2.dtd">
+<sqlMapConfig>
+
+    <!-- statement IDs are namespace-qualified: "Product.findAllOnSale" etc. -->
+    <!-- enhancement OFF so iBATIS uses plain reflection (no cglib needed on Java 8) -->
+    <settings
+        useStatementNamespaces="true"
+        enhancementEnabled="false"
+        lazyLoadingEnabled="false"
+        cacheModelsEnabled="false"/>
+
+    <!-- tx + datasource come from Spring (SqlMapClientFactoryBean), not here.
+         The SqlMapClient joins the active DataSourceTransactionManager transaction
+         (useTransactionAwareDataSource defaults to true). Declaring a <dataSource>
+         here would make iBATIS instantiate its own and fail at startup. -->
+
+    <sqlMap resource="ibatis/sqlmap/ProductSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/OrderSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/MemberSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/CouponSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/DeliverySqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/InventoryLogSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/ReportSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/CartSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/PromotionSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/ReviewSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/WishlistSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/SettlementBatchSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/PointExpirySqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/Report2SqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/OrderLifecycleSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/RefundSqlMap.xml"/>
+    <sqlMap resource="ibatis/sqlmap/AuditSqlMap.xml"/>
+
+</sqlMapConfig>

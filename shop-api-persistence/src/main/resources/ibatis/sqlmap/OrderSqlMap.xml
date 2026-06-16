@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Order">
+
+    <insert id="insertOrder" parameterClass="java.util.HashMap">
+        INSERT INTO orders (member_id, order_date, status, total_price, pay_method, pg_tid, approval_no, zipcode, address)
+        VALUES (#memberId#, #orderDate#, #status#, #totalPrice#, #payMethod#, #pgTid#, #approvalNo#, #zipcode#, #address#)
+        <selectKey keyProperty="orderId" resultClass="long" type="post">
+            SELECT LAST_INSERT_ID()
+        </selectKey>
+    </insert>
+
+    <insert id="insertOrderItem" parameterClass="java.util.HashMap">
+        INSERT INTO order_item (order_id, option_id, qty, unit_price)
+        VALUES (#orderId#, #optionId#, #qty#, #unitPrice#)
+    </insert>
+
+    <select id="findOrderById" parameterClass="long" resultClass="java.util.HashMap">
+        SELECT order_id, member_id, order_date, status, total_price,
+               pay_method, pg_tid, approval_no, zipcode, address
+        FROM orders WHERE order_id = #orderId#
+    </select>
+
+    <select id="findOrderItems" parameterClass="long" resultClass="java.util.HashMap">
+        SELECT order_item_id, order_id, option_id, qty, unit_price
+        FROM order_item WHERE order_id = #orderId#
+    </select>
+
+    <select id="findOrdersByMember" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+        SELECT o.order_id, o.order_date, o.status, o.total_price,
+               p.name AS product_name, po.option_name, oi.qty, oi.unit_price
+        FROM orders o
+          JOIN order_item oi     ON o.order_id = oi.order_id
+          JOIN product_option po ON oi.option_id = po.option_id
+          JOIN product p         ON po.product_id = p.product_id
+        WHERE o.member_id = #memberId#
+        ORDER BY o.order_id DESC
+        LIMIT #size# OFFSET #offset#
+    </select>
+    <select id="countOrdersByMember" parameterClass="long" resultClass="int">
+        SELECT COUNT(*) FROM orders WHERE member_id = #memberId#
+    </select>
+
+    <insert id="insertSettlement" parameterClass="java.util.HashMap">
+        INSERT INTO order_settlement (order_id, item_total, discount, use_point, pay_amount, shipping_fee, vat, grand_total, reg_date)
+        VALUES (#orderId#, #itemTotal#, #discount#, #usePoint#, #payAmount#, #shippingFee#, #vat#, #grandTotal#, #regDate#)
+    </insert>
+    <select id="findSettlement" parameterClass="long" resultClass="java.util.HashMap">
+        SELECT order_id, item_total, discount, use_point, pay_amount, shipping_fee, vat, grand_total, reg_date
+        FROM order_settlement WHERE order_id = #orderId#
+    </select>
+
+    <select id="countMemberProductPurchases" parameterClass="java.util.HashMap" resultClass="java.lang.Integer">
+        SELECT COUNT(*) FROM orders o
+          JOIN order_item oi ON oi.order_id = o.order_id
+          JOIN product_option po ON oi.option_id = po.option_id
+        WHERE o.member_id = #memberId# AND po.product_id = #productId# AND o.status = 2
+    </select>
+
+</sqlMap>

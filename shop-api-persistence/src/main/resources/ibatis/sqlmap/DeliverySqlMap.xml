@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Delivery">
+
+    <insert id="insertDelivery" parameterClass="java.util.HashMap">
+        INSERT INTO delivery (order_id, carrier, tracking_no, status, reg_date)
+        VALUES (#orderId#, #carrier#, #trackingNo#, #status#, #regDate#)
+        <selectKey keyProperty="deliveryId" resultClass="long" type="post">
+            SELECT LAST_INSERT_ID()
+        </selectKey>
+    </insert>
+
+    <select id="findByOrderId" parameterClass="long" resultClass="java.util.HashMap">
+        SELECT delivery_id, order_id, carrier, tracking_no, status, reg_date
+        FROM delivery WHERE order_id = #orderId#
+    </select>
+
+</sqlMap>

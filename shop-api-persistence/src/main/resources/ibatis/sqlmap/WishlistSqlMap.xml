@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Wishlist">
+  <insert id="insertWish" parameterClass="java.util.HashMap">
+    INSERT INTO wishlist (member_id, product_id, reg_date) VALUES (#memberId#, #productId#, #regDate#)
+    <selectKey keyProperty="wishlistId" resultClass="long" type="post">SELECT LAST_INSERT_ID()</selectKey>
+  </insert>
+  <select id="findOne" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+    SELECT wishlist_id FROM wishlist WHERE member_id = #memberId# AND product_id = #productId#
+  </select>
+  <delete id="deleteWish" parameterClass="long">
+    DELETE FROM wishlist WHERE wishlist_id = #wishlistId#
+  </delete>
+  <select id="findByMember" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT w.wishlist_id, w.member_id, w.product_id, w.reg_date,
+           p.name AS product_name, p.price, p.status,
+           CONCAT(p.name, ' (', p.category, ')') AS display_label
+    FROM wishlist w JOIN product p ON w.product_id = p.product_id
+    WHERE w.member_id = #memberId#
+    ORDER BY w.wishlist_id DESC
+  </select>
+  <select id="countByMember" parameterClass="long" resultClass="int">
+    SELECT COUNT(*) FROM wishlist WHERE member_id = #memberId#
+  </select>
+
+  <select id="findSignalsByMember" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT w.wishlist_id, w.member_id, w.product_id, p.name AS PRODUCT_NAME, p.price, p.status,
+      COALESCE(SUM(po.stock_qty),0) AS TOTAL_STOCK,
+      CASE WHEN p.status='ON_SALE' AND COALESCE(SUM(po.stock_qty),0) &gt; 0 THEN 'BUY_NOW'
+           WHEN p.status='SOLD_OUT' OR COALESCE(SUM(po.stock_qty),0)=0 THEN 'OUT_OF_STOCK'
+           WHEN p.status='DISCONTINUED' THEN 'GONE' ELSE 'WATCH' END AS STOCK_SIGNAL,
+      CONCAT(p.name,' - ',p.status) AS DISPLAY_LABEL
+    FROM wishlist w
+      JOIN product p ON w.product_id = p.product_id
+      LEFT JOIN product_option po ON po.product_id = p.product_id
+    WHERE w.member_id = #memberId#
+    GROUP BY w.wishlist_id, w.member_id, w.product_id, p.name, p.price, p.status
+    ORDER BY w.wishlist_id DESC
+  </select>
+
+  <select id="countBackInStock" parameterClass="long" resultClass="int">
+    SELECT COUNT(*) FROM (
+      SELECT w.product_id FROM wishlist w
+        JOIN product p ON w.product_id = p.product_id
+        JOIN product_option po ON po.product_id = p.product_id
+      WHERE w.member_id = #memberId# AND p.status='ON_SALE'
+      GROUP BY w.product_id HAVING SUM(po.stock_qty) &gt; 0) t
+  </select>
+
+  <select id="findWishlistedSoldOut" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT w.wishlist_id, w.product_id, p.name AS PRODUCT_NAME
+    FROM wishlist w JOIN product p ON w.product_id = p.product_id
+    WHERE w.member_id = #memberId# AND NOT EXISTS (
+      SELECT 1 FROM product_option po WHERE po.product_id = p.product_id AND po.stock_qty &gt; 0)
+    ORDER BY w.wishlist_id
+  </select>
+</sqlMap>

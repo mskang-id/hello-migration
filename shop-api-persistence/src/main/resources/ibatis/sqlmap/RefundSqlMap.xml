@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Refund">
+  <insert id="insertRefund" parameterClass="java.util.HashMap">
+    INSERT INTO refund (order_id, refund_type, refund_amount, point_restore, point_revoke, pg_tid, reason, reg_date)
+    VALUES (#orderId#, #refundType#, #refundAmount#, #pointRestore#, #pointRevoke#, #pgTid#, #reason#, #regDate#)
+    <selectKey keyProperty="refundId" resultClass="long" type="post">
+      SELECT LAST_INSERT_ID()
+    </selectKey>
+  </insert>
+  <select id="findByOrderId" parameterClass="long" resultClass="java.util.HashMap">
+    SELECT refund_id, order_id, refund_type, refund_amount, point_restore, point_revoke, pg_tid, reason, reg_date
+    FROM refund WHERE order_id = #orderId#
+  </select>
+</sqlMap>

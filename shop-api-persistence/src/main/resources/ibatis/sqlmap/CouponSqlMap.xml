@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"
+  "http://ibatis.apache.org/dtd/sql-map-2.dtd">
+<sqlMap namespace="Coupon">
+
+    <!-- discount math is in the CASE below: the amount is computed inside the query -->
+    <select id="findApplicableCoupon" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+        SELECT coupon_id, code, discount_type, discount_val, min_order, expire_date,
+            CASE
+                WHEN #orderAmount# &lt; min_order THEN 0
+                WHEN discount_type = 'F' THEN discount_val
+                WHEN discount_type = 'R' THEN (#orderAmount# * discount_val / 100)
+                ELSE 0
+            END AS computed_discount
+        FROM coupon
+        WHERE coupon_id = #couponId#
+          AND used_yn = 'N'
+          AND expire_date &gt;= #today#
+    </select>
+
+    <update id="markUsed" parameterClass="long">
+        UPDATE coupon SET used_yn = 'Y' WHERE coupon_id = #couponId#
+    </update>
+
+</sqlMap>
