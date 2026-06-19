@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <!-- Includes everything from test-context + batch beans (manually, no scheduler) -->
+    <import resource="classpath:spring/test-context.xml"/>
+    <!-- Batch beans are already picked up by service-context.xml component-scan of com.shopmall.manager -->
+    <!-- This context exists to signal "batch tests go here" and can add overrides if needed -->
+</beans>
