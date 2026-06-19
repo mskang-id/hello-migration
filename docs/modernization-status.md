@@ -12,7 +12,7 @@ Phase 1을 아직 시작하지 않았다.
 
 ## Phase 1 — 동작 기반 안전망 구축 및 내부 결합도 완화
 
-**상태:** 미시작
+**상태:** 진행 중
 
 ### 종료 조건 체크리스트
 
@@ -23,7 +23,25 @@ Phase 1을 아직 시작하지 않았다.
 
 ### 작업 내역
 
-_아직 없음._
+#### 2026-06-19: 특성화 테스트 코드 작성 완료
+
+- 안전망 계획서 작성 (`docs/safety-net-plan.md`) — 15개 고정 대상 식별
+- 설계 문서 작성 (`docs/superpowers/specs/2026-06-19-phase1-characterization-tests-design.md`)
+- 구현 계획 작성 (`docs/superpowers/plans/2026-06-19-phase1-characterization-tests.md`)
+- 테스트 인프라 구축: JUnit 4 + spring-test + AssertJ 1.7.1, BaseIntegrationTest, test-context.xml
+- 15개 특성화 테스트 클래스 작성 완료:
+  - Batch 1 (위험 1~5): PlaceOrder, CancelOrder, PointEarning, InventoryLedger, OrderStatusGuard
+  - Batch 2 (위험 6~9): ShippingFee, VatCalculation, CommissionCalculation, CouponApplication
+  - Batch 3 (위험 10~15): SettlementBatch, PointExpiryBatch, DailySummaryBatch, CartCheckout, ProductQuery, PromotionApply
+- GitHub 푸시 완료: https://github.com/mskang-id/hello-migration
+
+#### 다음 작업 (Docker 필요)
+
+1. `./tools/build.sh test` 실행 → 테스트 Green 확인 (실패 시 assertion 조정)
+2. 테스트 전체 통과 후 리팩터링 시작:
+   - Map<String, Object> → VO 교체 (311곳)
+   - -1L → 예외 교체 (14곳)
+   - UnsafeMemoryUtil 제거
 
 ---
 
